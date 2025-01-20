@@ -1,0 +1,148 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EPUB File convert to Textarea</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #contentContainer {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        textarea {
+            width: 100%;
+            height: 80vh;
+            resize: vertical;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+        #copyButton {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>EPUB File convert to Textarea</h1>
+    <input type="file" id="fileInput" accept=".epub">
+    <div id="contentContainer">
+        <textarea id="content" placeholder="Book content will appear here." readonly></textarea>
+        <button id="copyButton">Copy Content</button>
+    </div>
+
+    <!-- Include JSZip via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.name.endsWith('.epub')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    JSZip.loadAsync(arrayBuffer).then(zip => {
+                        // Extract container.xml
+                        return zip.file('META-INF/container.xml').async('string').then(containerXml => {
+                            const parser = new DOMParser();
+                            const containerDoc = parser.parseFromString(containerXml, "application/xml");
+                            const rootfileElement = containerDoc.querySelector('rootfile');
+                            if (!rootfileElement) {
+                                throw new Error('rootfile element not found in container.xml.');
+                            }
+                            const rootfilePath = rootfileElement.getAttribute('full-path');
+                            if (!rootfilePath) {
+                                throw new Error('full-path attribute not found in rootfile element.');
+                            }
+                            return zip.file(rootfilePath).async('string').then(opfXml => ({ zip, opfXml, rootfilePath }));
+                        });
+                    }).then(({ zip, opfXml, rootfilePath }) => {
+                        const parser = new DOMParser();
+                        const opfDoc = parser.parseFromString(opfXml, "application/xml");
+
+                        // Extract manifest and spine
+                        const manifestItems = opfDoc.querySelectorAll('manifest > item');
+                        const spine = opfDoc.querySelector('spine');
+                        if (!spine) throw new Error('Spine element not found in OPF.');
+
+                        const spineItems = spine.querySelectorAll('itemref');
+                        const dir = rootfilePath.substring(0, rootfilePath.lastIndexOf('/') + 1);
+
+                        let content = '';
+                        const promises = [];
+
+                        spineItems.forEach(itemref => {
+                            const id = itemref.getAttribute('idref');
+                            const item = Array.from(manifestItems).find(i => i.getAttribute('id') === id);
+                            if (item) {
+                                const href = item.getAttribute('href');
+                                // Resolve relative paths
+                                const path = dir + href;
+                                // Handle URL fragments (e.g., #section)
+                                const cleanPath = path.split('#')[0];
+                                promises.push(
+                                    zip.file(cleanPath).async('string').then(chapter => {
+                                        // Optionally, remove HTML tags or keep plain text
+                                        const chapterText = extractTextFromHTML(chapter);
+                                        content += `\n\n---\n\n${chapterText}`;
+                                    }).catch(err => {
+                                        console.warn(`Failed to load chapter: ${cleanPath}`, err);
+                                    })
+                                );
+                            }
+                        });
+
+                        return Promise.all(promises).then(() => content);
+                    }).then(content => {
+                        const textarea = document.getElementById('content');
+                        textarea.value = content || 'No content available.';
+                    }).catch(err => {
+                        console.error(err);
+                        alert('Error parsing EPUB: ' + err.message);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('Please upload a valid EPUB file.');
+            }
+        });
+
+        // Function to extract plain text from HTML content
+        function extractTextFromHTML(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            // Remove scripts and styles
+            const scripts = doc.querySelectorAll('script, style');
+            scripts.forEach(s => s.remove());
+            // Get the text content
+            return doc.body ? doc.body.innerText : '';
+        }
+
+        // Copy content to clipboard
+        document.getElementById('copyButton').addEventListener('click', function() {
+            const textarea = document.getElementById('content');
+            textarea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Content copied to clipboard!');
+                } else {
+                    alert('Failed to copy content.');
+                }
+            } catch (err) {
+                console.error('Copy command failed:', err);
+                alert('Failed to copy content.');
+            }
+        });
+    </script>
+</body>
+</html>
