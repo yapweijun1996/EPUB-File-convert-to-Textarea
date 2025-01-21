@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>EPUB File convert to Textarea</title>
+    <title>EPUB File Convert to Textarea</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -17,7 +17,7 @@
         }
         textarea {
             width: 100%;
-            height: 80vh;
+            height: 60vh;
             resize: vertical;
             padding: 10px;
             font-family: monospace;
@@ -25,20 +25,37 @@
             border: 1px solid #ccc;
             box-sizing: border-box;
         }
-        #copyButton {
+        #buttonsContainer {
             margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
         }
+        #settings {
+            margin-top: 20px;
+        }
+        #settings label {
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>EPUB File convert to Textarea</h1>
+    <h1>EPUB File Convert to Textarea</h1>
     <input type="file" id="fileInput" accept=".epub">
     <div id="contentContainer">
         <textarea id="content" placeholder="Book content will appear here." readonly></textarea>
-        <button id="copyButton">Copy Content</button>
+        <div id="buttonsContainer">
+            <button id="copyButton">Copy Content</button>
+            <button id="saveButton">Save as .txt</button>
+        </div>
+    </div>
+    <div id="settings">
+        <label for="maxChars">Max Characters per .txt:</label>
+        <input type="number" id="maxChars" value="10000" min="1000" step="1000">
     </div>
 
     <!-- Include JSZip via CDN -->
@@ -84,18 +101,17 @@
                             const id = itemref.getAttribute('idref');
                             const item = Array.from(manifestItems).find(i => i.getAttribute('id') === id);
                             if (item) {
-                                const href = item.getAttribute('href');
+                                let href = item.getAttribute('href');
                                 // Resolve relative paths
-                                const path = dir + href;
+                                let path = dir + href;
                                 // Handle URL fragments (e.g., #section)
-                                const cleanPath = path.split('#')[0];
+                                path = path.split('#')[0];
                                 promises.push(
-                                    zip.file(cleanPath).async('string').then(chapter => {
-                                        // Optionally, remove HTML tags or keep plain text
+                                    zip.file(path).async('string').then(chapter => {
                                         const chapterText = extractTextFromHTML(chapter);
                                         content += `\n\n---\n\n${chapterText}`;
                                     }).catch(err => {
-                                        console.warn(`Failed to load chapter: ${cleanPath}`, err);
+                                        console.warn(`Failed to load chapter: ${path}`, err);
                                     })
                                 );
                             }
@@ -142,6 +158,30 @@
                 console.error('Copy command failed:', err);
                 alert('Failed to copy content.');
             }
+        });
+
+        // Save content as .txt files
+        document.getElementById('saveButton').addEventListener('click', function() {
+            const content = document.getElementById('content').value;
+            if (!content) {
+                alert('No content to save.');
+                return;
+            }
+            const maxChars = parseInt(document.getElementById('maxChars').value, 10) || 10000;
+            const totalParts = Math.ceil(content.length / maxChars);
+            for (let i = 0; i < totalParts; i++) {
+                const part = content.substring(i * maxChars, (i + 1) * maxChars);
+                const blob = new Blob([part], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `content_part_${i + 1}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            alert(`Content saved as ${totalParts} file(s).`);
         });
     </script>
 </body>
