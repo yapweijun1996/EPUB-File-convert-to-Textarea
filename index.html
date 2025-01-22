@@ -68,7 +68,6 @@
                 reader.onload = function(e) {
                     const arrayBuffer = e.target.result;
                     JSZip.loadAsync(arrayBuffer).then(zip => {
-                        // Extract container.xml
                         return zip.file('META-INF/container.xml').async('string').then(containerXml => {
                             const parser = new DOMParser();
                             const containerDoc = parser.parseFromString(containerXml, "application/xml");
@@ -86,7 +85,6 @@
                         const parser = new DOMParser();
                         const opfDoc = parser.parseFromString(opfXml, "application/xml");
 
-                        // Extract manifest and spine
                         const manifestItems = opfDoc.querySelectorAll('manifest > item');
                         const spine = opfDoc.querySelector('spine');
                         if (!spine) throw new Error('Spine element not found in OPF.');
@@ -102,10 +100,7 @@
                             const item = Array.from(manifestItems).find(i => i.getAttribute('id') === id);
                             if (item) {
                                 let href = item.getAttribute('href');
-                                // Resolve relative paths
-                                let path = dir + href;
-                                // Handle URL fragments (e.g., #section)
-                                path = path.split('#')[0];
+                                let path = dir + href.split('#')[0];
                                 promises.push(
                                     zip.file(path).async('string').then(chapter => {
                                         const chapterText = extractTextFromHTML(chapter);
@@ -132,18 +127,13 @@
             }
         });
 
-        // Function to extract plain text from HTML content
         function extractTextFromHTML(html) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            // Remove scripts and styles
-            const scripts = doc.querySelectorAll('script, style');
-            scripts.forEach(s => s.remove());
-            // Get the text content
+            doc.querySelectorAll('script, style').forEach(s => s.remove());
             return doc.body ? doc.body.innerText : '';
         }
 
-        // Copy content to clipboard
         document.getElementById('copyButton').addEventListener('click', function() {
             const textarea = document.getElementById('content');
             textarea.select();
@@ -160,7 +150,6 @@
             }
         });
 
-        // Save content as .txt files
         document.getElementById('saveButton').addEventListener('click', function() {
             const content = document.getElementById('content').value;
             if (!content) {
@@ -169,19 +158,27 @@
             }
             const maxChars = parseInt(document.getElementById('maxChars').value, 10) || 10000;
             const totalParts = Math.ceil(content.length / maxChars);
+            const zip = new JSZip();
+
             for (let i = 0; i < totalParts; i++) {
                 const part = content.substring(i * maxChars, (i + 1) * maxChars);
-                const blob = new Blob([part], { type: 'text/plain' });
+                zip.file(`content_part_${i + 1}.txt`, part);
+            }
+
+            zip.generateAsync({ type: 'blob' }).then(function(blob) {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `content_part_${i + 1}.txt`;
+                a.download = 'content_parts.zip';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-            }
-            alert(`Content saved as ${totalParts} file(s).`);
+                alert(`Content saved as a ZIP file with ${totalParts} part(s).`);
+            }).catch(err => {
+                console.error('ZIP generation failed:', err);
+                alert('Failed to save content.');
+            });
         });
     </script>
 </body>
