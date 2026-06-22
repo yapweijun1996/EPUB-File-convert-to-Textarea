@@ -1,0 +1,26 @@
+{
+  "name": "EPUB Admin Converter",
+  "short_name": "EPUB Admin",
+  "description": "Admin panel style browser-local EPUB to text converter demo.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#111827",
+  "categories": ["productivity", "utilities", "books"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
